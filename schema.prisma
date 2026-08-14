@@ -1,0 +1,791 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// USERS & AUTHENTICATION
+
+model User {
+  id           BigInt   @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String?
+  phone        String?  @unique
+  role         UserRole @default(CUSTOMER)
+
+  bookings         Booking[]
+  notifications    Notification[]
+  reviews          Review[]
+  seatHolds        SeatHold[]
+  idempotencyKeys  IdempotencyKey[]
+  accounts         OAuthAccount[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  THEATRE_MANAGER
+}
+
+model Promotion {
+  id BigInt @id @default(autoincrement())
+
+  code        String @unique
+  name        String
+  description String?
+
+  type PromotionType
+
+  discountType      DiscountType
+  discountValue     Decimal      @db.Decimal(10, 2)
+  maxDiscountAmount Decimal?     @db.Decimal(10, 2)
+
+  minimumOrderAmount Decimal? @db.Decimal(10, 2)
+
+  startAt DateTime
+  endAt   DateTime
+
+  usageLimit Int?
+  usageCount Int     @default(0)
+  perUserLimit Int?
+
+  isActive Boolean @default(true)
+
+  applications DiscountApplication[]
+  movies       PromotionMovie[]
+  theatres     PromotionTheatre[]
+  paymentMethods PromotionPaymentMethod[]
+  banks        PromotionBank[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive, startAt, endAt])
+  @@map("promotions")
+}
+
+enum PromotionType {
+  COUPON
+  FIRST_ORDER
+  PAYMENT_METHOD
+  BANK_OFFER
+  MOVIE_OFFER
+  THEATRE_OFFER
+  GENERAL
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+model PromotionMovie {
+  promotionId BigInt
+  movieId     BigInt
+
+  promotion Promotion @relation(
+    fields: [promotionId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  movie Movie @relation(
+    fields: [movieId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@id([promotionId, movieId])
+  @@index([movieId])
+  @@map("promotion_movies")
+}
+
+model PromotionTheatre {
+  promotionId BigInt
+  theatreId   BigInt
+
+  promotion Promotion @relation(
+    fields: [promotionId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  theatre Theatre @relation(
+    fields: [theatreId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@id([promotionId, theatreId])
+  @@index([theatreId])
+  @@map("promotion_theatres")
+}
+
+model PromotionPaymentMethod {
+  promotionId   BigInt
+  paymentMethod PaymentMethod
+
+  promotion Promotion @relation(
+    fields: [promotionId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@id([promotionId, paymentMethod])
+  @@map("promotion_payment_methods")
+}
+
+model PromotionBank {
+  promotionId BigInt
+  bankName    String
+
+  promotion Promotion @relation(
+    fields: [promotionId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@id([promotionId, bankName])
+  @@index([bankName])
+  @@map("promotion_banks")
+}
+
+model IdempotencyKey {
+  id BigInt @id @default(autoincrement())
+
+  userId BigInt
+  key    String
+
+  requestHash String?
+
+  status IdempotencyStatus @default(PROCESSING)
+
+  responseStatus Int?
+  responseBody   Json?
+
+  expiresAt DateTime
+
+  user User @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model OAuthAccount {
+  id BigInt @id @default(autoincrement())
+
+  userId            BigInt
+  provider          OAuthProvider
+  providerAccountId String
+
+  user User @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  createdAt DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+enum OAuthProvider {
+  GOOGLE
+  TRUECALLER
+}
+
+// MOVIES
+
+model Movie {
+  id              BigInt      @id @default(autoincrement())
+  title           String
+  description     String?
+  durationMinutes Int
+  releaseDate     DateTime?
+  certificate     String?
+  posterUrl       String?
+  trailerUrl      String?
+  status          MovieStatus @default(UPCOMING)
+
+  genres    MovieGenre[]
+  languages MovieLanguage[]
+  shows     Show[]
+  cast      MovieCast[]
+  reviews   Review[]
+  promotions PromotionMovie[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([title])
+  @@index([status])
+  @@index([releaseDate])
+  @@map("movies")
+}
+
+model Language {
+  id   BigInt @id @default(autoincrement())
+  name String @unique
+  code String @unique
+
+  movies MovieLanguage[]
+
+  @@map("languages")
+}
+
+model MovieLanguage {
+  movieId    BigInt
+  languageId BigInt
+
+  movie Movie @relation(
+    fields: [movieId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  language Language @relation(
+    fields: [languageId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@id([movieId, languageId])
+  @@index([languageId])
+  @@map("movie_languages")
+}
+
+enum MovieStatus {
+  UPCOMING
+  NOW_SHOWING
+  ENDED
+}
+
+model Genre {
+  id   BigInt @id @default(autoincrement())
+  name String @unique
+
+  movies MovieGenre[]
+
+  @@map("genres")
+}
+
+model MovieGenre {
+  movieId BigInt
+  genreId BigInt
+
+  movie Movie @relation(
+    fields: [movieId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  genre Genre @relation(
+    fields: [genreId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@id([movieId, genreId])
+  @@map("movie_genres")
+}
+
+// PEOPLE / CAST
+
+model Person {
+  id         BigInt  @id @default(autoincrement())
+  name       String
+  profileUrl String?
+
+  movieCast MovieCast[]
+
+  @@index([name])
+  @@map("people")
+}
+
+model MovieCast {
+  movieId       BigInt
+  personId      BigInt
+  role          CastRole
+  characterName String?
+
+  movie Movie @relation(
+    fields: [movieId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  person Person @relation(
+    fields: [personId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  @@id([movieId, personId, role])
+  @@map("movie_cast")
+}
+
+enum CastRole {
+  ACTOR
+  DIRECTOR
+  PRODUCER
+  WRITER
+  CINEMATOGRAPHER
+  MUSICIAN
+}
+
+// THEATRES
+
+model Theatre {
+  id        BigInt @id @default(autoincrement())
+  name      String
+  address   String
+  city      String
+  state     String
+  pincode   String
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  screens Screen[]
+  promotions PromotionTheatre[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([city])
+  @@index([state])
+  @@map("theatres")
+}
+
+model Screen {
+  id         BigInt     @id @default(autoincrement())
+  theatreId  BigInt
+  name       String
+  screenType ScreenType
+  capacity   Int
+
+  theatre Theatre @relation(
+    fields: [theatreId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  seats Seat[]
+  shows Show[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([theatreId, name])
+  @@index([theatreId])
+  @@map("screens")
+}
+
+enum ScreenType {
+  STANDARD
+  IMAX
+  FOUR_DX
+  DOLBY
+}
+
+// SEATS
+
+model Seat {
+  id         BigInt   @id @default(autoincrement())
+  screenId   BigInt
+  rowLabel   String
+  seatNumber Int
+  seatType   SeatType
+
+  screen Screen @relation(
+    fields: [screenId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  showSeats ShowSeat[]
+
+  @@unique([screenId, rowLabel, seatNumber])
+  @@index([screenId])
+  @@map("seats")
+}
+
+enum SeatType {
+  REGULAR
+  PREMIUM
+  RECLINER
+}
+
+// SHOWS
+
+model Show {
+  id         BigInt     @id @default(autoincrement())
+  movieId    BigInt
+  screenId   BigInt
+  startTime  DateTime
+  endTime    DateTime
+  basePrice  Decimal    @db.Decimal(10, 2)
+  status     ShowStatus @default(SCHEDULED)
+
+  movie Movie @relation(
+    fields: [movieId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  screen Screen @relation(
+    fields: [screenId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  showSeats ShowSeat[]
+  bookings  Booking[]
+
+  createdAt DateTime @default(now())
+
+  @@index([movieId, startTime])
+  @@index([screenId, startTime])
+  @@index([startTime])
+  @@map("shows")
+}
+
+enum ShowStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+// SHOW SEATS
+
+model ShowSeat {
+  id BigInt @id @default(autoincrement())
+
+  showId BigInt
+  seatId BigInt
+
+  status ShowSeatStatus @default(AVAILABLE)
+  price  Decimal        @db.Decimal(10, 2)
+
+  show Show @relation(
+    fields: [showId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  seat Seat @relation(
+    fields: [seatId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  seatHold     SeatHold?
+  bookingSeats BookingSeat[]
+
+  @@unique([showId, seatId])
+  @@index([showId, status])
+  @@map("show_seats")
+}
+
+model SeatHold {
+  id BigInt @id @default(autoincrement())
+
+  showSeatId BigInt
+  userId     BigInt
+
+  expiresAt DateTime
+
+  showSeat ShowSeat @relation(
+    fields: [showSeatId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  user User @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  createdAt DateTime @default(now())
+
+  @@unique([showSeatId])
+  @@index([expiresAt])
+  @@index([userId])
+  @@map("seat_holds")
+}
+
+enum ShowSeatStatus {
+  AVAILABLE
+  BOOKED
+}
+
+// BOOKINGS
+
+model Booking {
+  id               BigInt        @id @default(autoincrement())
+  userId           BigInt
+  showId           BigInt
+  bookingReference String        @unique
+
+  status      BookingStatus @default(PENDING)
+  totalAmount Decimal       @db.Decimal(10, 2)
+
+  expiresAt DateTime?
+
+  user User @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  show Show @relation(
+    fields: [showId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  seats                BookingSeat[]
+  payment              Payment?
+  cancellation         Cancellation?
+  review               Review?
+  discountApplications DiscountApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([showId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+// BOOKING SEATS
+
+model BookingSeat {
+  id BigInt @id @default(autoincrement())
+
+  bookingId  BigInt
+  showSeatId BigInt
+  price      Decimal @db.Decimal(10, 2)
+
+  booking Booking @relation(
+    fields: [bookingId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  showSeat ShowSeat @relation(
+    fields: [showSeatId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  @@unique([bookingId, showSeatId])
+  @@index([showSeatId])
+  @@map("booking_seats")
+}
+
+// PAYMENTS
+
+model DiscountApplication {
+  id BigInt @id @default(autoincrement())
+
+  bookingId   BigInt
+  promotionId BigInt
+
+  discountAmount Decimal @db.Decimal(10, 2)
+
+  promotionCode String
+  discountType  DiscountType
+  discountValue Decimal     @db.Decimal(10, 2)
+
+  booking Booking @relation(
+    fields: [bookingId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  promotion Promotion @relation(
+    fields: [promotionId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([promotionId])
+  @@map("discount_applications")
+}
+
+model Payment {
+  id BigInt @id @default(autoincrement())
+
+  bookingId BigInt @unique
+
+  amount               Decimal       @db.Decimal(10, 2)
+  method               PaymentMethod
+  status               PaymentStatus
+  transactionReference String        @unique
+
+  booking Booking @relation(
+    fields: [bookingId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([status])
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  WALLET
+}
+
+enum PaymentStatus {
+  INITIATED
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+// CANCELLATIONS / REFUNDS
+
+model Cancellation {
+  id BigInt @id @default(autoincrement())
+
+  bookingId BigInt @unique
+
+  reason       String?
+  refundAmount Decimal @db.Decimal(10, 2)
+  status       RefundStatus
+
+  booking Booking @relation(
+    fields: [bookingId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  createdAt   DateTime @default(now())
+  processedAt DateTime?
+
+  @@index([status])
+  @@map("cancellations")
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// NOTIFICATIONS
+
+model Notification {
+  id     BigInt @id @default(autoincrement())
+  userId BigInt
+
+  type    NotificationType
+  title   String
+  message String
+  isRead  Boolean @default(false)
+
+  user User @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  SHOW_REMINDER
+}
+
+// REVIEWS
+
+model Review {
+  id BigInt @id @default(autoincrement())
+
+  userId    BigInt
+  movieId   BigInt
+  bookingId BigInt @unique
+
+  rating  Int
+  comment String?
+
+  user User @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  movie Movie @relation(
+    fields: [movieId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  booking Booking @relation(
+    fields: [bookingId],
+    references: [id],
+    onDelete: Restrict
+  )
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([movieId, rating])
+  @@index([userId])
+  @@map("reviews")
+}
