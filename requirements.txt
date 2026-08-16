@@ -8,3 +8,5 @@ requests
 
 google-auth 
 sib-api-v3-sdk
+psycopg[binary]
+python-decouple
