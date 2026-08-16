@@ -1,0 +1,16 @@
+[project]
+name = "authentication"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "django>=5.2.17",
+    "django-allauth[socialaccount]>=65.19.1",
+    "djangorestframework>=3.18.0",
+    "djangorestframework-simplejwt>=5.5.1",
+    "google-auth>=2.56.3",
+    "python-dotenv>=1.2.2",
+    "requests>=2.34.2",
+    "sib-api-v3-sdk>=7.6.0",
+]
